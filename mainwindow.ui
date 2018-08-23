@@ -92,6 +92,19 @@
      <string>clear</string>
     </property>
    </widget>
+   <widget class="QPushButton" name="tryAgainPushButton">
+    <property name="geometry">
+     <rect>
+      <x>720</x>
+      <y>100</y>
+      <width>89</width>
+      <height>25</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>try again</string>
+    </property>
+   </widget>
   </widget>
  </widget>
  <layoutdefault spacing="6" margin="11"/>

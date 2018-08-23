@@ -1,18 +1,12 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
+#include "lib.h"
+
 #include <QEvent>
 #include <QMouseEvent>
 #include <QFileDialog>
 #include <QTime>
-
-#include <fstream>
-
-std::ostream & operator << (std::ostream & os, const QPoint & in)
-{
-	os << in.x() << "\t" << in.y();
-	return os;
-}
 
 MainWindow::MainWindow(QWidget *parent) :
 	QMainWindow(parent),
@@ -20,7 +14,8 @@ MainWindow::MainWindow(QWidget *parent) :
 {
 	ui->setupUi(this);
 
-	QPixmap peec(ui->picLabel->size());
+	ui->picLabel->resize(picSiz);
+	QPixmap peec(picSiz);
 	peec.fill("black");
 	ui->picLabel->setPixmap(peec);
 	ui->picLabel->setMouseTracking(true);
@@ -60,11 +55,28 @@ MainWindow::MainWindow(QWidget *parent) :
 	QObject::connect(ui->clearPushButton, &QPushButton::clicked,
 					 this, &MainWindow::clearAll);
 
-//	std::cout << trackingQuality(loadFigure("/media/Files/Data/Tracking/2.txt"),
-//								 loadFigure("/media/Files/Data/Tracking/2_.txt"))
-//			  <<std::endl;
-//	exit(0);
+	QObject::connect(ui->tryAgainPushButton, &QPushButton::clicked,
+					 [this]()
+	{
+		if(!currFigure.empty())
+		{
+		   ui->picLabel->setPixmap(drawFigure(currFigure));
+		}
+		pic.fill("black");
+		if(pnt.device()) { pnt.end(); }
+		currTracking.clear();
+		tracking = false;
+	});
 
+#if 0
+	std::cout << trackingQualityInner(loadFigure("/media/Files/Data/Tracking/5.txt"),
+									  loadFigure("/media/Files/Data/Tracking/tr1.txt"))
+			  << std::endl;
+	std::cout << trackingQualityInner(loadFigure("/media/Files/Data/Tracking/5.txt"),
+									  loadFigure("/media/Files/Data/Tracking/tr2.txt"))
+			  << std::endl;
+	exit(0);
+#endif
 }
 
 MainWindow::~MainWindow()
@@ -74,7 +86,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::clearAll()
 {
-	QPixmap peec(ui->picLabel->size());
+	QPixmap peec(picSiz);
 	peec.fill("black");
 	ui->picLabel->setPixmap(peec);
 
@@ -83,77 +95,6 @@ void MainWindow::clearAll()
 	currTracking.clear();
 	currFigure.clear();
 	tracking = false;
-}
-
-std::vector<QPoint> MainWindow::loadFigure(const QString & filePath)
-{
-	std::vector<QPoint> res{};
-	std::ifstream inStr(filePath.toStdString());
-	for(int x, y; inStr >> x >> y;)
-	{
-		res.push_back(QPoint(x, y));
-	}
-	inStr.close();
-	return res;
-}
-
-QPixmap MainWindow::drawFigure(const std::vector<QPoint> & in)
-{
-	QPixmap res(ui->picLabel->size());
-	res.fill("black");
-	QPainter paint;
-	paint.begin(&res);
-	paint.setPen(QPen(QBrush("white"), 2));
-
-	for(int i = 0; i < in.size() - 1; ++i)
-	{
-		paint.drawLine(in[i].x(), in[i].y(), in[i + 1].x(), in[i + 1].y());
-	}
-	paint.end();
-	return res;
-}
-
-void MainWindow::saveFigure(const QString & filePath, const std::vector<QPoint> & in)
-{
-	std::ofstream outStr(filePath.toStdString());
-	for(const QPoint & p : in)
-	{
-		outStr << p.x() << "\t" << p.y() << "\n";
-	}
-	outStr.close();
-}
-
-double MainWindow::trackingQuality(const std::vector<QPoint> & fig,
-								   const std::vector<QPoint> & track)
-{
-	std::vector<double> res{};
-	for(const auto & figPoint : fig)
-	{
-		double dist = 500.;
-		for(const auto & trackPoint : track)
-		{
-			QPoint a = figPoint - trackPoint;
-			double d = std::sqrt(QPoint::dotProduct(a, a));
-			dist = std::min(dist, d);
-
-//			std::cout << figPoint << std::endl;
-//			std::cout << trackPoint << std::endl;
-//			std::cout << a << std::endl;
-//			std::cout << d << std::endl;
-//			std::cout << std::endl;
-
-			if(dist < 5 && d > 10) break;
-		}
-//		return dist;
-		res.push_back(dist);
-	}
-	/// average distance of best fit
-	const double ret = std::accumulate(std::begin(res), std::end(res), 0.) / res.size();
-
-	/// mapped [lowest-highest] -> [100-0]
-	const double lowest = 1;
-	const double highest = 6;
-	return (highest - ret) / (highest - lowest) * 100;
 }
 
 bool MainWindow::eventFilter(QObject *obj, QEvent *event)
@@ -173,7 +114,7 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event)
 				initPos = ev->pos();
 				prevPos = ev->pos();
 				currTracking.clear();
-				pic = *ui->picLabel->pixmap();
+				pic = *(ui->picLabel->pixmap());
 				pnt.begin(&pic);
 				pnt.setPen(QPen(QBrush("gray"), 2));
 				sta = std::chrono::system_clock::now();
@@ -186,7 +127,7 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event)
 				if(ui->trackRadioButton->isChecked())
 				{
 					comPortDataStream << finishCode;
-					using chr = std::chrono;
+					namespace chr = std::chrono;
 					fin = chr::system_clock::now();
 					std::cout << "quality = "
 							  << trackingQuality(currFigure, currTracking)
@@ -214,9 +155,9 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event)
 				pnt.drawLine(prevPos, ev->pos());
 				ui->picLabel->setPixmap(pic);
 				prevPos = ev->pos();
+				return true;
 			}
 			return true;
-			break;
 		}
 		default:
 		{
