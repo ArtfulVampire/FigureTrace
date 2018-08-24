@@ -3,6 +3,7 @@
 #include <fstream>
 #include <cmath>
 #include <map>
+#include <valarray>
 
 #include <QPainter>
 
@@ -155,25 +156,47 @@ alignTracking(const std::vector<QPointF> & fig,
 
 template <typename pointType>
 std::vector<pointType>
-smoothCurve(const std::vector<pointType> & curve, int num)
+smoothCurve(const std::vector<pointType> & curve)
 {
 	std::vector<pointType> res{curve};
-	const int halfWidth = 4; /// to do with gaussian, 3 * sigma = halfWidth
 
-	for(int numSmooth = 0; numSmooth < num; ++numSmooth)
+	const int halfWidth = 15; /// to do with gaussian, 3 * sigma = halfWidth
+	std::valarray<double> gaus{2 * halfWidth + 1};
+	for(int i = 0; i < gaus.size(); ++i)
 	{
-		pointType prev = res[0];
-		for(int i = 1; i < res.size() - 1; ++i)
+		double x = (halfWidth - i) * 3. / (halfWidth + 1);
+		gaus[i] = std::exp(- x * x / 2.);
+	}
+	gaus /= gaus.sum();
+
+
+	std::vector<pointType> tmp(2 * halfWidth + 1); /// for "in-place" smoothing
+	for(int i = 0; i < halfWidth; ++i)
+	{
+		tmp[i] = res[i];
+	}
+
+	for(int i = halfWidth; i < res.size() - halfWidth; ++i)
+	{
+		tmp[halfWidth] = res[i];
+		std::copy(std::begin(res) + i + 1,
+				  std::begin(res) + i + halfWidth + 1,
+				  std::begin(tmp) + halfWidth);
+		res[i] = std::inner_product(std::begin(tmp),
+									std::end(tmp),
+									std::begin(gaus),
+									pointType(0, 0));
+
+		for(int j = 0; j < halfWidth; ++j)
 		{
-			pointType curr = res[i];
-			res[i] = (prev + curr + res[i + 1]) / 3.;
-			prev = curr;
+			tmp[j] = tmp[j + 1];
 		}
 	}
+	std::cout << "end2" << std::endl;
 	return res;
 }
-template std::vector<QPoint> smoothCurve(const std::vector<QPoint> & curve, int num);
-template std::vector<QPointF> smoothCurve(const std::vector<QPointF> & curve, int num);
+template std::vector<QPoint> smoothCurve(const std::vector<QPoint> & curve);
+template std::vector<QPointF> smoothCurve(const std::vector<QPointF> & curve);
 
 std::vector<QPoint> loadFigure(const QString & filePath)
 {

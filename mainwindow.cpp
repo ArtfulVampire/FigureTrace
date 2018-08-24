@@ -42,7 +42,12 @@ MainWindow::MainWindow(QWidget *parent) :
 			}
 			else // if(fName.endsWith(QRegExp(R"(bmp|jpg|jpeg|tiff|png)")))
 			{
-				currFigure = smoothCurve(readFromPicture(fName), 3);
+				currFigure = readFromPicture(fName);
+
+				std::cout << "end1" << std::endl;
+				currFigure = smoothCurve(currFigure);
+
+				std::cout << "end3" << std::endl;
 				ui->picLabel->setPixmap(drawFigure(currFigure));
 			}
 		}

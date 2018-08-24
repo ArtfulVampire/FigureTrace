@@ -35,7 +35,7 @@ alignTracking(const std::vector<pointType> & fig,
 
 template <typename pointType>
 std::vector<pointType>
-smoothCurve(const std::vector<pointType> & curve, int num);
+smoothCurve(const std::vector<pointType> & curve);
 
 std::vector<QPoint> loadFigure(const QString & filePath);
 
