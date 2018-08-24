@@ -36,7 +36,15 @@ MainWindow::MainWindow(QWidget *parent) :
 													 "/media/Files/Data/Tracking");
 		if(!fName.isEmpty())
 		{
-			ui->picLabel->setPixmap(drawFigure(currFigure = loadFigure(fName)));
+			if(fName.endsWith(".txt", Qt::CaseInsensitive))
+			{
+				ui->picLabel->setPixmap(drawFigure(currFigure = loadFigure(fName)));
+			}
+			else // if(fName.endsWith(QRegExp(R"(bmp|jpg|jpeg|tiff|png)")))
+			{
+				currFigure = smoothCurve(readFromPicture(fName), 3);
+				ui->picLabel->setPixmap(drawFigure(currFigure));
+			}
 		}
 	});
 
@@ -75,6 +83,20 @@ MainWindow::MainWindow(QWidget *parent) :
 	std::cout << trackingQualityInner(loadFigure("/media/Files/Data/Tracking/5.txt"),
 									  loadFigure("/media/Files/Data/Tracking/tr2.txt"))
 			  << std::endl;
+	exit(0);
+#endif
+
+#if 0
+	direction d{direction::NW};
+	std::cout << getDs(d-1).first << "\t" << getDs(d-1).second << std::endl;
+	exit(0);
+#endif
+
+#if 0
+	drawFigure(loadFigure("/media/Files/Data/Tracking/1.txt"))
+			.save("/media/Files/Data/Tracking/1.png");
+	auto a = readFromPicture("/media/Files/Data/Tracking/1.png");
+	saveFigure("/media/Files/Data/Tracking/1_.txt", a);
 	exit(0);
 #endif
 }
@@ -139,7 +161,8 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event)
 				}
 				else if(ui->drawRadioButton->isChecked())
 				{
-					/* do nothing? */
+//					currTracking = smoothCurve(currTracking, 3);
+					ui->picLabel->setPixmap(drawFigure(currTracking));
 				}
 			}
 			tracking = !tracking;

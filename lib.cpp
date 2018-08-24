@@ -2,6 +2,7 @@
 
 #include <fstream>
 #include <cmath>
+#include <map>
 
 #include <QPainter>
 
@@ -10,6 +11,49 @@ std::ostream & operator << (std::ostream & os, const QPoint & in)
 	os << in.x() << "\t" << in.y();
 	return os;
 }
+
+direction operator++(direction & in, int)
+{
+	return in = direction((static_cast<int>(in) + 1) % 8);
+}
+
+direction operator+(const direction & in, int a)
+{
+	return direction((static_cast<int>(in) + a) % 8);
+}
+
+direction operator-(const direction & in, int a)
+{
+	return direction((static_cast<int>(in) - a + 8) % 8);
+}
+
+direction operator--(direction & in, int)
+{
+	return in = direction((static_cast<int>(in) - 1 + 8) % 8);
+}
+
+direction opposite(const direction & in)
+{
+	return direction((static_cast<int>(in) + 4) % 8);
+}
+
+std::pair<int, int> getDs(const direction & in)
+{
+	switch(in)
+	{
+	case direction::NW: { return {-1, -1}; }
+	case direction::NN: { return {0, -1}; }
+	case direction::NE: { return {1, -1}; }
+	case direction::EE: { return {1, 0}; }
+	case direction::SE: { return {1, 1}; }
+	case direction::SS: { return {0, 1}; }
+	case direction::SW: { return {-1, 1}; }
+	case direction::WW: { return {-1, 0}; }
+	default: { /* never get here */ return {0, 0}; }
+	}
+}
+
+
 
 template <typename pointType>
 double trackingQuality(const std::vector<pointType> & fig,
@@ -109,6 +153,28 @@ std::vector<QPointF>
 alignTracking(const std::vector<QPointF> & fig,
 				const std::vector<QPointF> & track);
 
+template <typename pointType>
+std::vector<pointType>
+smoothCurve(const std::vector<pointType> & curve, int num)
+{
+	std::vector<pointType> res{curve};
+	const int halfWidth = 4; /// to do with gaussian, 3 * sigma = halfWidth
+
+	for(int numSmooth = 0; numSmooth < num; ++numSmooth)
+	{
+		pointType prev = res[0];
+		for(int i = 1; i < res.size() - 1; ++i)
+		{
+			pointType curr = res[i];
+			res[i] = (prev + curr + res[i + 1]) / 3.;
+			prev = curr;
+		}
+	}
+	return res;
+}
+template std::vector<QPoint> smoothCurve(const std::vector<QPoint> & curve, int num);
+template std::vector<QPointF> smoothCurve(const std::vector<QPointF> & curve, int num);
+
 std::vector<QPoint> loadFigure(const QString & filePath)
 {
 	std::vector<QPoint> res{};
@@ -134,6 +200,107 @@ QPixmap drawFigure(const std::vector<QPoint> & in)
 		paint.drawLine(in[i].x(), in[i].y(), in[i + 1].x(), in[i + 1].y());
 	}
 	paint.end();
+	return res;
+}
+
+
+
+bool areCloseEnough(const QColor & in1, const QColor & in2, int thr)
+{
+	return (std::abs(in1.red() - in2.red())
+			+ std::abs(in1.green() - in2.green())
+			+ std::abs(in1.blue() - in2.blue())) < thr;
+}
+
+
+std::vector<QPoint> readFromPicture(const QString & picPath)
+{
+	/// TO DO
+	QImage pic(picPath);
+	/// detect background and curve colors
+	/// ligthness, (number, x, y)
+	std::map<double, std::tuple<int, int, int>> colorMap{};
+	for(int x = 0; x < pic.width(); ++x)
+	{
+		for(int y = 0; y < pic.height(); ++y)
+		{
+			auto index = pic.pixelColor(x, y).lightnessF();
+			std::get<0>(colorMap[index]) += 1;
+			std::get<1>(colorMap[index]) = x;
+			std::get<2>(colorMap[index]) = y;
+		}
+	}
+	std::vector<std::pair<double, int>> colorVec{};
+	for(const auto & in : colorMap)
+	{
+		colorVec.push_back({in.first, std::get<0>(in.second)});
+	}
+	std::sort(std::begin(colorVec), std::end(colorVec),
+			  [](const auto & in1, const auto & in2)
+	{ return in1.second > in2.second; });
+
+	/// lowest in the rightest column
+	const QPoint curveStart(
+				std::get<1>(colorMap[colorVec.back().first]),
+			std::get<2>(colorMap[colorVec.back().first]));
+//	std::cout << "start point = " << curveStart << std::endl;
+	auto curveColor = pic.pixelColor(curveStart);
+
+	std::vector<QPoint> res{};
+	res.push_back(curveStart);
+
+
+
+	QPoint currPoint = curveStart;
+	QPoint nextPoint{};
+	direction prevDir;
+	/// detect initial direction
+	/// at first check diagonal directions (NW, SW, WW, NN), other are empty
+	for(int d : {0, 6, 7, 1})
+	{
+		direction dir = static_cast<direction>(d);
+		nextPoint = QPoint(curveStart.x() + getDs(dir).first,
+						   curveStart.y() + getDs(dir).second);
+		if(areCloseEnough(pic.pixelColor(nextPoint), curveColor))
+		{
+			res.push_back(nextPoint);
+			currPoint = nextPoint;
+			prevDir = dir;
+			break;
+		}
+	}
+	/// follow the curve
+	while(1)
+	{
+		for(direction dir : {
+			prevDir,					/// same direction
+			prevDir + 1, prevDir - 1,	/// a little curvy
+			prevDir + 2, prevDir - 2,	/// orthogonal
+			prevDir + 3, prevDir - 3,	/// acute
+//			prevDir + 4					/// go back?
+	})
+		{
+			nextPoint = QPoint(currPoint.x() + getDs(dir).first,
+							   currPoint.y() + getDs(dir).second);
+			if(areCloseEnough(pic.pixelColor(nextPoint), curveColor))
+			{
+//				std::cout
+//						<< nextPoint << "\t"
+//						<< QPoint::dotProduct(nextPoint - curveStart, nextPoint - curveStart)
+//						<< std::endl;
+				res.push_back(nextPoint);
+				currPoint = nextPoint;
+				prevDir = dir;
+				break;
+			}
+		}
+		if(QPoint::dotProduct(nextPoint - curveStart, nextPoint - curveStart) <= 4)
+		{
+			res.push_back((nextPoint + curveStart) / 2);
+			break;
+		}
+	}
+
 	return res;
 }
 
