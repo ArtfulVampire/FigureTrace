@@ -43,11 +43,8 @@ MainWindow::MainWindow(QWidget *parent) :
 			else // if(fName.endsWith(QRegExp(R"(bmp|jpg|jpeg|tiff|png)")))
 			{
 				currFigure = readFromPicture(fName);
-
-				std::cout << "end1" << std::endl;
-				currFigure = smoothCurve(currFigure);
-
-				std::cout << "end3" << std::endl;
+//				std::cout << currFigure.size() << std::endl;
+//				currFigure = smoothCurve(currFigure);
 				ui->picLabel->setPixmap(drawFigure(currFigure));
 			}
 		}
@@ -102,6 +99,16 @@ MainWindow::MainWindow(QWidget *parent) :
 			.save("/media/Files/Data/Tracking/1.png");
 	auto a = readFromPicture("/media/Files/Data/Tracking/1.png");
 	saveFigure("/media/Files/Data/Tracking/1_.txt", a);
+	exit(0);
+#endif
+
+#if 01
+//	thresholding("/media/Files/Data/Tracking/hedge.jpg");
+	currFigure = readFromPicture("/media/Files/Data/Tracking/hedge.jpg");
+	std::cout << currFigure.size() << std::endl;
+//	currFigure = smoothCurve(currFigure);
+	saveFigure("/media/Files/Data/Tracking/hedge.txt", currFigure);
+//	ui->picLabel->setPixmap(drawFigure(currFigure));
 	exit(0);
 #endif
 }

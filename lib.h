@@ -16,7 +16,7 @@ direction operator+(const direction & in, int a);
 direction operator-(const direction & in, int a);
 direction operator--(direction & in, int);
 direction opposite(const direction & in);
-std::pair<int, int> getDs(const direction & in);
+QPoint getDs(const direction & in);
 
 std::ostream & operator<< (std::ostream & os, const QPoint & in);
 
@@ -43,6 +43,8 @@ template <typename pointType>
 std::vector<pointType> approximateCurve(const std::vector<pointType> & in);
 
 QPixmap drawFigure(const std::vector<QPoint> & in);
+
+void thresholding(const QString & picPath);
 
 
 bool areCloseEnough(const QColor & in1, const QColor & in2, int thr = 15);

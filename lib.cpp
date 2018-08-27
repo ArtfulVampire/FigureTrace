@@ -38,7 +38,7 @@ direction opposite(const direction & in)
 	return direction((static_cast<int>(in) + 4) % 8);
 }
 
-std::pair<int, int> getDs(const direction & in)
+QPoint getDs(const direction & in)
 {
 	switch(in)
 	{
@@ -160,7 +160,7 @@ smoothCurve(const std::vector<pointType> & curve)
 {
 	std::vector<pointType> res{curve};
 
-	const int halfWidth = 15; /// to do with gaussian, 3 * sigma = halfWidth
+	const int halfWidth = 4; /// to do with gaussian, 3 * sigma = halfWidth
 	std::valarray<double> gaus{2 * halfWidth + 1};
 	for(int i = 0; i < gaus.size(); ++i)
 	{
@@ -226,7 +226,19 @@ QPixmap drawFigure(const std::vector<QPoint> & in)
 	return res;
 }
 
-
+void thresholding(const QString & picPath)
+{
+	QImage pic(picPath);
+	for(int x = 0; x < pic.width(); ++x)
+	{
+		for(int y = 0; y < pic.height(); ++y)
+		{
+			if(pic.pixelColor(x, y).lightnessF() > 0.5) { pic.setPixelColor(x, y, QColor("white"));}
+			else { pic.setPixelColor(x, y, QColor("black"));}
+		}
+	}
+	pic.save(picPath, 0, 100);
+}
 
 bool areCloseEnough(const QColor & in1, const QColor & in2, int thr)
 {
@@ -235,13 +247,12 @@ bool areCloseEnough(const QColor & in1, const QColor & in2, int thr)
 			+ std::abs(in1.blue() - in2.blue())) < thr;
 }
 
-
 std::vector<QPoint> readFromPicture(const QString & picPath)
 {
 	/// TO DO
 	QImage pic(picPath);
 	/// detect background and curve colors
-	/// ligthness, (number, x, y)
+	/// colorMap[ligthness] -> (number, x, y)
 	std::map<double, std::tuple<int, int, int>> colorMap{};
 	for(int x = 0; x < pic.width(); ++x)
 	{
@@ -253,37 +264,35 @@ std::vector<QPoint> readFromPicture(const QString & picPath)
 			std::get<2>(colorMap[index]) = y;
 		}
 	}
-	std::vector<std::pair<double, int>> colorVec{};
+
+	/// [lightness] = count;
+	std::vector<int> colorVec(2); /// 0 - dark, 1 - light
 	for(const auto & in : colorMap)
 	{
-		colorVec.push_back({in.first, std::get<0>(in.second)});
+		colorVec[ in.first > 0.5 ] += std::get<0>(in.second);
 	}
-	std::sort(std::begin(colorVec), std::end(colorVec),
-			  [](const auto & in1, const auto & in2)
-	{ return in1.second > in2.second; });
+	int lineLightness = colorVec[0] > colorVec[1];
 
 	/// lowest in the rightest column
 	const QPoint curveStart(
-				std::get<1>(colorMap[colorVec.back().first]),
-			std::get<2>(colorMap[colorVec.back().first]));
+				std::get<1>(colorMap[lineLightness]),
+				std::get<2>(colorMap[lineLightness]));
 //	std::cout << "start point = " << curveStart << std::endl;
 	auto curveColor = pic.pixelColor(curveStart);
 
-	std::vector<QPoint> res{};
+
+
+	std::vector<QPoint> res{}; res.reserve(colorVec[lineLightness]);
 	res.push_back(curveStart);
 
-
-
 	QPoint currPoint = curveStart;
-	QPoint nextPoint{};
 	direction prevDir;
 	/// detect initial direction
 	/// at first check diagonal directions (NW, SW, WW, NN), other are empty
 	for(int d : {0, 6, 7, 1})
 	{
 		direction dir = static_cast<direction>(d);
-		nextPoint = QPoint(curveStart.x() + getDs(dir).first,
-						   curveStart.y() + getDs(dir).second);
+		QPoint nextPoint = curveStart + getDs(dir);
 		if(areCloseEnough(pic.pixelColor(nextPoint), curveColor))
 		{
 			res.push_back(nextPoint);
@@ -292,38 +301,45 @@ std::vector<QPoint> readFromPicture(const QString & picPath)
 			break;
 		}
 	}
+
+	int counter = 0;
 	/// follow the curve
 	while(1)
 	{
+		QPoint nextPoint{};
 		for(direction dir : {
 			prevDir,					/// same direction
 			prevDir + 1, prevDir - 1,	/// a little curvy
 			prevDir + 2, prevDir - 2,	/// orthogonal
-			prevDir + 3, prevDir - 3,	/// acute
+//			prevDir + 3, prevDir - 3,	/// acute
 //			prevDir + 4					/// go back?
 	})
 		{
-			nextPoint = QPoint(currPoint.x() + getDs(dir).first,
-							   currPoint.y() + getDs(dir).second);
+			/// add curve vector history
+			/// add comparison between left- and right-side turns - which is better
+			nextPoint = currPoint + getDs(dir);
 			if(areCloseEnough(pic.pixelColor(nextPoint), curveColor))
 			{
-//				std::cout
-//						<< nextPoint << "\t"
+				std::cout
+						<< nextPoint << "\t"
 //						<< QPoint::dotProduct(nextPoint - curveStart, nextPoint - curveStart)
-//						<< std::endl;
+						<< std::endl;
 				res.push_back(nextPoint);
 				currPoint = nextPoint;
-				prevDir = dir;
+				preevDir = dir;
 				break;
 			}
 		}
-		if(QPoint::dotProduct(nextPoint - curveStart, nextPoint - curveStart) <= 4)
+		if(QPoint::dotProduct(nextPoint - curveStart,
+							  nextPoint - curveStart) <= 256 /// sqr(lineWidth)
+		   && counter > 30
+		   )
 		{
 			res.push_back((nextPoint + curveStart) / 2);
 			break;
 		}
+		++counter;
 	}
-
 	return res;
 }
 
