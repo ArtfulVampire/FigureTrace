@@ -9,6 +9,7 @@
 #include <QColor>
 
 const QSize picSiz(650, 650);
+const QString defPath = "/media/Files/Data/Tracking";
 
 enum class direction : int {NW = 0, NN, NE, EE, SE, SS, SW, WW};
 direction operator++(direction & in, int);
@@ -17,6 +18,9 @@ direction operator-(const direction & in, int a);
 direction operator--(direction & in, int);
 direction opposite(const direction & in);
 QPoint getDs(const direction & in);
+QPoint operator+(const direction & a, const direction & b);
+QPoint operator+(const direction & a, const QPoint & b);
+QPoint operator+(const QPoint & a, const direction & b);
 
 std::ostream & operator<< (std::ostream & os, const QPoint & in);
 
@@ -44,7 +48,9 @@ std::vector<pointType> approximateCurve(const std::vector<pointType> & in);
 
 QPixmap drawFigure(const std::vector<QPoint> & in);
 
-void thresholding(const QString & picPath);
+
+QImage makeThinnerLine(const QString & picPath, bool isLineWhite, int num);
+QImage thresholding(const QString & picPath);
 
 
 bool areCloseEnough(const QColor & in1, const QColor & in2, int thr = 15);

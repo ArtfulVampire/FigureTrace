@@ -103,11 +103,12 @@ MainWindow::MainWindow(QWidget *parent) :
 #endif
 
 #if 01
-//	thresholding("/media/Files/Data/Tracking/hedge.jpg");
+//	thresholding(defPath + "/hedge.jpg").save(defPath + "/hedge1.jpg", 0, 100);
+//	makeThinnerLine(defPath + "/hedge1.jpg", false, 4).save(defPath + "/hedge2.jpg", 0, 100);
 	currFigure = readFromPicture("/media/Files/Data/Tracking/hedge.jpg");
-	std::cout << currFigure.size() << std::endl;
+//	std::cout << currFigure.size() << std::endl;
 //	currFigure = smoothCurve(currFigure);
-	saveFigure("/media/Files/Data/Tracking/hedge.txt", currFigure);
+//	saveFigure("/media/Files/Data/Tracking/hedge.txt", currFigure);
 //	ui->picLabel->setPixmap(drawFigure(currFigure));
 	exit(0);
 #endif

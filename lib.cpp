@@ -4,6 +4,7 @@
 #include <cmath>
 #include <map>
 #include <valarray>
+#include <queue>
 
 #include <QPainter>
 
@@ -21,6 +22,21 @@ direction operator++(direction & in, int)
 direction operator+(const direction & in, int a)
 {
 	return direction((static_cast<int>(in) + a) % 8);
+}
+
+QPoint operator+(const direction & a, const direction & b)
+{
+	return getDs(a) + getDs(b);
+}
+
+QPoint operator+(const direction & a, const QPoint & b)
+{
+	return getDs(a) + b;
+}
+
+QPoint operator+(const QPoint & a, const direction & b)
+{
+	return a + getDs(b);
 }
 
 direction operator-(const direction & in, int a)
@@ -226,7 +242,7 @@ QPixmap drawFigure(const std::vector<QPoint> & in)
 	return res;
 }
 
-void thresholding(const QString & picPath)
+QImage thresholding(const QString & picPath)
 {
 	QImage pic(picPath);
 	for(int x = 0; x < pic.width(); ++x)
@@ -237,7 +253,47 @@ void thresholding(const QString & picPath)
 			else { pic.setPixelColor(x, y, QColor("black"));}
 		}
 	}
-	pic.save(picPath, 0, 100);
+	return pic;
+}
+
+QImage makeThinnerLine(const QString & picPath, bool isLineWhite, int num)
+{
+	const QColor curveColor = isLineWhite ? QColor("white") : QColor("black");
+	const QColor bgColor	= isLineWhite ? QColor("black") : QColor("white");
+	std::vector<QPoint> toExclude{};
+
+	QImage pic(picPath);
+	for(int j = 0; j < num; ++j)
+	{
+		for(int x = 0; x < pic.width(); ++x)
+		{
+			for(int y = 0; y < pic.height(); ++y)
+			{
+				QPoint p(x, y);
+				if(!areCloseEnough(pic.pixelColor(p), curveColor)) /// not the curve color
+				{
+					continue;
+				}
+
+				for(int i = 0; i < 8; ++i)
+				{
+					direction dir(static_cast<direction>(i));
+					if(areCloseEnough(pic.pixelColor(p + getDs(dir)), bgColor))
+					{
+						toExclude.push_back(p);
+						break;
+					}
+				}
+			}
+		}
+		std::cout << toExclude.size() << std::endl;
+		for(auto pt : toExclude)
+		{
+			pic.setPixelColor(pt, bgColor);
+		}
+		toExclude.clear();
+	}
+	return pic;
 }
 
 bool areCloseEnough(const QColor & in1, const QColor & in2, int thr)
@@ -249,7 +305,6 @@ bool areCloseEnough(const QColor & in1, const QColor & in2, int thr)
 
 std::vector<QPoint> readFromPicture(const QString & picPath)
 {
-	/// TO DO
 	QImage pic(picPath);
 	/// detect background and curve colors
 	/// colorMap[ligthness] -> (number, x, y)
@@ -286,7 +341,7 @@ std::vector<QPoint> readFromPicture(const QString & picPath)
 	res.push_back(curveStart);
 
 	QPoint currPoint = curveStart;
-	direction prevDir;
+	direction prevDir; /// = history.back()
 	/// detect initial direction
 	/// at first check diagonal directions (NW, SW, WW, NN), other are empty
 	for(int d : {0, 6, 7, 1})
@@ -302,21 +357,24 @@ std::vector<QPoint> readFromPicture(const QString & picPath)
 		}
 	}
 
-	int counter = 0;
 	/// follow the curve
+	const int maxHistorySize = 10;		/// magic const
+	std::queue<direction> history{};	/// what were the last N movements
+	int counter = 0;
 	while(1)
 	{
 		QPoint nextPoint{};
-		for(direction dir : {
-			prevDir,					/// same direction
-			prevDir + 1, prevDir - 1,	/// a little curvy
-			prevDir + 2, prevDir - 2,	/// orthogonal
-//			prevDir + 3, prevDir - 3,	/// acute
-//			prevDir + 4					/// go back?
+		for(int num : {
+			0,			/// same direction
+			+1, -1,		/// a little curvy
+			+2, -2,		/// orthogonal
+//			+3, -3,		/// acute
+//			+4			/// go back?
 	})
 		{
 			/// add curve vector history
 			/// add comparison between left- and right-side turns - which is better
+			direction dir(prevDir + num);
 			nextPoint = currPoint + getDs(dir);
 			if(areCloseEnough(pic.pixelColor(nextPoint), curveColor))
 			{
@@ -325,8 +383,10 @@ std::vector<QPoint> readFromPicture(const QString & picPath)
 //						<< QPoint::dotProduct(nextPoint - curveStart, nextPoint - curveStart)
 						<< std::endl;
 				res.push_back(nextPoint);
+				history.push(dir);
+				if(history.size() > maxHistorySize) { history.pop(); }
 				currPoint = nextPoint;
-				preevDir = dir;
+				prevDir = dir;
 				break;
 			}
 		}
