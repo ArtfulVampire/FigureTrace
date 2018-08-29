@@ -5,12 +5,19 @@
 #include <map>
 #include <valarray>
 #include <queue>
+#include <utility>
 
 #include <QPainter>
 
 std::ostream & operator << (std::ostream & os, const QPoint & in)
 {
 	os << in.x() << "\t" << in.y();
+	return os;
+}
+
+std::ostream & operator << (std::ostream & os, const direction & in)
+{
+	os << getDs(in);
 	return os;
 }
 
@@ -21,7 +28,17 @@ direction operator++(direction & in, int)
 
 direction operator+(const direction & in, int a)
 {
-	return direction((static_cast<int>(in) + a) % 8);
+	return direction((static_cast<int>(in) + a + 8) % 8); /// +8 for "0 + (-1)"
+}
+
+QPoint operator*(const direction & in, int a)
+{
+	return getDs(in) * a;
+}
+
+QPoint operator*(int a, const direction & in)
+{
+	return getDs(in) * a;
 }
 
 QPoint operator+(const direction & a, const direction & b)
@@ -68,6 +85,22 @@ QPoint getDs(const direction & in)
 	case direction::WW: { return {-1, 0}; }
 	default: { /* never get here */ return {0, 0}; }
 	}
+}
+
+direction dirFromPoint(const QPoint & pt)
+{
+	if(		pt == QPoint{-1, -1})	{ return direction::NW; }
+	else if(pt == QPoint{0, -1})	{ return direction::NN; }
+	else if(pt == QPoint{1, -1})	{ return direction::NE; }
+	else if(pt == QPoint{1, 0})		{ return direction::EE; }
+	else if(pt == QPoint{1, 1})		{ return direction::SE; }
+	else if(pt == QPoint{0, 1})		{ return direction::SS; }
+	else if(pt == QPoint{-1, 1})	{ return direction::SW; }
+	else if(pt == QPoint{-1, 0})	{ return direction::WW; }
+}
+direction dirFromInt(int in)
+{
+	return static_cast<direction>((in + 8) % 8);
 }
 
 
@@ -270,7 +303,7 @@ QImage makeThinnerLine(const QString & picPath, bool isLineWhite, int num)
 			for(int y = 0; y < pic.height(); ++y)
 			{
 				QPoint p(x, y);
-				if(!areCloseEnough(pic.pixelColor(p), curveColor)) /// not the curve color
+				if(!areColorsSimilar(pic.pixelColor(p), curveColor)) /// not the curve color
 				{
 					continue;
 				}
@@ -278,7 +311,7 @@ QImage makeThinnerLine(const QString & picPath, bool isLineWhite, int num)
 				for(int i = 0; i < 8; ++i)
 				{
 					direction dir(static_cast<direction>(i));
-					if(areCloseEnough(pic.pixelColor(p + getDs(dir)), bgColor))
+					if(areColorsSimilar(pic.pixelColor(p + getDs(dir)), bgColor))
 					{
 						toExclude.push_back(p);
 						break;
@@ -296,11 +329,30 @@ QImage makeThinnerLine(const QString & picPath, bool isLineWhite, int num)
 	return pic;
 }
 
-bool areCloseEnough(const QColor & in1, const QColor & in2, int thr)
+bool areColorsSimilar(const QColor & in1, const QColor & in2, int thr)
 {
 	return (std::abs(in1.red() - in2.red())
 			+ std::abs(in1.green() - in2.green())
 			+ std::abs(in1.blue() - in2.blue())) < thr;
+}
+
+int numPointsMask(const QImage & pic, const QPoint & pt,
+				  const QColor & curveColor, int lineThickness)
+{
+	int res{0};
+	for(int x = -lineThickness / 2; x <= lineThickness / 2; ++x)
+	{
+		for(int y = -lineThickness / 2; y <= lineThickness / 2; ++y)
+		{
+			if(std::abs(std::pow(x, 2) + std::pow(y, 2))
+			   <= std::pow(lineThickness / 2., 2)
+			   && !areColorsSimilar(pic.pixelColor(pt - QPoint(x, y)), curveColor))
+			{
+				++res;
+			}
+		}
+	}
+	return res;
 }
 
 std::vector<QPoint> readFromPicture(const QString & picPath)
@@ -328,6 +380,237 @@ std::vector<QPoint> readFromPicture(const QString & picPath)
 	}
 	int lineLightness = colorVec[0] > colorVec[1];
 
+#if 01
+	/// new version 29-Aug-18
+
+	/// lowest in the rightest column
+	const QPoint curveS(
+				std::get<1>(colorMap[lineLightness]),
+				std::get<2>(colorMap[lineLightness]));
+
+	/// the line should be vertical here
+
+	int lineThickness{};
+	for(int i = 1; i < 50; ++i) /// magic const
+	{
+		if(!areColorsSimilar(pic.pixelColor(curveS - QPoint(i, 0)),
+						   pic.pixelColor(curveS)))
+		{
+			lineThickness = i;
+			break;
+		}
+	}
+
+
+
+
+	lineThickness = 16;
+
+
+
+
+	const QPoint curveStart = curveS - QPoint(lineThickness / 2, 0);
+	auto curveColor = pic.pixelColor(curveStart);
+
+	std::vector<QPoint> res{};
+	res.reserve(colorVec[lineLightness] / lineThickness * 2); /// heuristic
+	res.push_back(curveStart);
+
+
+	/// follow the curve
+	const int maxHistorySize = 25;			/// magic const
+	std::list<direction> historyDirs{};		/// what were the last N movements
+	int counter = 0;
+
+
+	const int numSteps = 4;
+	const int base = 3;
+	std::list<std::list<int>> directionVariantsLittle{};
+	for(int i = 0; i < std::pow(base, numSteps); ++i)
+	{
+		bool flag = true;
+		std::list<int> tmp{};
+		int rot{0};
+		for(int pos = 0; pos < numSteps; ++pos)
+		{
+			int a = (i / int(std::pow(base, pos))) % base;
+			if(a == 2) { a = -1; }
+			tmp.push_front(a);
+			rot += a;
+			if(std::abs(rot) >= 4) { flag = false; break; }
+		}
+		if(flag)
+		{
+			directionVariantsLittle.push_back(tmp);
+		}
+	}
+
+	std::list<std::list<int>> directionVariants{};
+	for(int i : {0, 1, -1})
+	{
+		for(auto in : directionVariantsLittle)
+		{
+			in.push_front(i);
+			directionVariants.push_back(in);
+		}
+	}
+	for(int i : {0, 1, -1})
+	{
+		for(auto in : directionVariantsLittle)
+		{
+			in.push_front(i);
+			if(std::abs(std::accumulate(std::begin(in), std::end(in), 0)) >= 4) continue;
+			directionVariants.push_back(in);
+		}
+	}
+
+
+//	for(auto & in1 : directionVariants)
+//	{
+//		for(auto in2 : in1)
+//		{
+//			std::cout << in2;
+//		}
+//		std::cout << std::endl;
+//	}
+//	std::cout << std::endl; exit(0);
+
+
+
+
+//	int abc{0};
+//	std::vector<QPoint> mmm
+//	{
+//		{1652, 1527},
+//		{1654, 1525},
+//		{1656, 1523},
+//		{1658, 1521},
+//		{1658, 1519},
+//		{1658, 1517},
+////		{1658, 1515},
+//	};
+//	for(auto p : mmm)
+//	{
+//		abc += numPointsMask(pic, p, curveColor, lineThickness);
+//	}
+//	std::cout << abc << std::endl; exit(0);
+
+
+
+
+	QPoint currPoint{curveStart};
+	direction prevDir(static_cast<direction>(0));	/// initial direction north-east
+	std::vector<std::pair<direction, int>> tmp{};	/// stores neighbour points quality
+
+	const int stepSize = 2;
+
+	std::cout << "start = " << curveStart << std::endl;
+
+	while(1)
+	{
+		bool fastFlag = false;
+		for(auto & variant : directionVariants)
+		{
+			if(currPoint == QPoint{1652, 1527} && variant == std::list<int>{0, 0, 0, -1, 0})
+			{
+				std::cout << "kjasdasdjfn" << std::endl;
+			}
+
+			int badPoints{0};
+			std::vector<QPoint> nextPoints{};
+			nextPoints.push_back(currPoint);
+
+			direction tmpDir{prevDir};
+			for(int dir : variant)
+			{
+				tmpDir = tmpDir + dir;
+				nextPoints.push_back(nextPoints.back() + stepSize * tmpDir);
+				badPoints += numPointsMask(pic, nextPoints.back(), curveColor, lineThickness);
+			}
+			tmp.push_back({prevDir + variant.front(), badPoints});
+
+			if(currPoint == QPoint{1652, 1527} && variant == std::list<int>{0, 0, 0, -1, 0})
+			{
+				std::cout << "bad points = " << badPoints << std::endl;
+			}
+
+//			if(badPoints == 0)
+//			{
+//				for(const QPoint & in : nextPoints)
+//				{
+//					res.push_back(in);
+//				}
+//				currPoint = res.back();
+//				prevDir = tmpDir;
+//				fastFlag = true;
+//				break;
+//			}
+		}
+		if(fastFlag)
+		{
+			tmp.clear();
+			continue;
+		}
+
+
+
+		std::stable_sort(std::begin(tmp), std::end(tmp),
+				  [](const auto & in1, const auto & in2)
+		{
+			return in1.second < in2.second;
+		});
+
+
+
+		if(tmp[0].second > 60)
+		{
+//			for(auto & in : tmp)
+//			{
+//				std::cout << in.first << "\t" << in.second << std::endl;
+//			}
+			std::cout << "too bad " << tmp[0].second << std::endl;
+			exit(0);
+		}
+
+
+		std::cout
+				<< currPoint << "\t" << static_cast<int>(tmp[0].first) << std::endl
+//				<< currPoint + stepSize * tmp[0].first << std::endl
+				<< tmp[0].second << std::endl
+				<< std::endl;
+
+		currPoint += stepSize * tmp[0].first;
+		res.push_back(currPoint);
+		prevDir = tmp[0].first;
+		tmp.clear();
+
+		historyDirs.push_back(prevDir);
+		if(historyDirs.size() > maxHistorySize)
+		{
+			historyDirs.pop_front();
+//			prevDir = dirFromPoint((QPointF(std::accumulate(std::begin(historyDirs),
+//															std::end(historyDirs),
+//															QPoint()))
+//									/ maxHistorySize).toPoint());
+//			std::cout << prevDir << std::endl;
+		}
+
+		if(QPoint::dotProduct(res.back() - curveStart,
+							  res.back() - curveStart) <= std::pow(lineThickness / 2, 2)
+		   && counter > lineThickness * 5
+		   )
+		{
+			std::cout << "finish" << std::endl;
+			res.push_back((res.back() + curveStart) / 2);
+			break;
+		}
+		++counter;
+	}
+	return res;
+#endif
+
+#if 0
+	/// old version 29-Aug-18
 	/// lowest in the rightest column
 	const QPoint curveStart(
 				std::get<1>(colorMap[lineLightness]),
@@ -358,9 +641,10 @@ std::vector<QPoint> readFromPicture(const QString & picPath)
 	}
 
 	/// follow the curve
-	const int maxHistorySize = 10;		/// magic const
+	const int maxHistorySize = 25;		/// magic const
 	std::queue<direction> history{};	/// what were the last N movements
 	int counter = 0;
+
 	while(1)
 	{
 		QPoint nextPoint{};
@@ -401,6 +685,7 @@ std::vector<QPoint> readFromPicture(const QString & picPath)
 		++counter;
 	}
 	return res;
+#endif
 }
 
 template <typename pointType>
@@ -447,3 +732,12 @@ std::vector<pointType> approximateCurve(const std::vector<pointType> & in)
 }
 template std::vector<QPoint> approximateCurve(const std::vector<QPoint> & in);
 template std::vector<QPointF> approximateCurve(const std::vector<QPointF> & in);
+
+
+template <typename Cont, typename Val>
+bool contains(const Cont & cont, Val val)
+{
+	return std::find(std::begin(cont), std::end(cont), val) != std::end(cont);
+}
+template bool contains(const std::list<direction> & cont, direction val);
+template bool contains(const std::list<QPoint> & cont, QPoint val);
