@@ -3,11 +3,16 @@
 
 #include "lib.h"
 
+#include <memory>
+
 #include <QEvent>
 #include <QMouseEvent>
 #include <QFileDialog>
 #include <QTime>
 #include <QMessageBox>
+#include <QShortcut>
+
+namespace chr = std::chrono;
 
 MainWindow::MainWindow(QWidget *parent) :
 	QMainWindow(parent),
@@ -15,11 +20,9 @@ MainWindow::MainWindow(QWidget *parent) :
 {
 	ui->setupUi(this);
 
-	ui->picLabel->resize(picSiz);
-	QPixmap peec(picSiz);
-	peec.fill("black");
-	ui->picLabel->setPixmap(peec);
 	ui->picLabel->setMouseTracking(true);
+
+	this->installEventFilter(this);
 	ui->picLabel->installEventFilter(this);
 
 	comPort = new QSerialPort(this);
@@ -27,97 +30,86 @@ MainWindow::MainWindow(QWidget *parent) :
 	comPort->open(QIODevice::WriteOnly);
 	comPortDataStream.setDevice(comPort);
 
+	ui->dontEnlargeCheckBox->setChecked(false);
 
-	QObject::connect(ui->openFilePushButton, &QPushButton::clicked,
+
+	clearScreen();
+	reassignPic();
+
+	QObject::connect(this, SIGNAL(completed()), this, SLOT(openNextFile()));
+	QObject::connect(ui->makeTxtPushButton,
+					 &QPushButton::clicked,
 					 [this]()
 	{
-		clearAll();
-		QString fName = QFileDialog::getOpenFileName(this,
-													 tr("Open figure file"),
-													 defPath);
-		if(!fName.isEmpty())
+		QString picPath = QFileDialog::getOpenFileName(this,
+													   tr("Choose a picture to make txt"),
+													   defPath,
+													   "*.png, *.jpg");
+		if(!picPath.isEmpty())
 		{
-			if(fName.endsWith(".txt", Qt::CaseInsensitive))
+			QMessageBox::information(this,
+									 tr("Info"),
+									 tr(R"(The process can take about a minute.)"));
+			auto figure = readFromPicture(picPath,
+										  ui->lineThicknessSpinBox->value(),
+										  ui->numStepsSpinBox->value(),
+										  ui->stepSizeSpinBox->value());
+			figure = approximateCurve(figure);
+			QString outPath = QFileDialog::getSaveFileName(this,
+														   tr("Choose output fileName"),
+														   defPath);
+			while(outPath.isEmpty())
 			{
-				ui->picLabel->setPixmap(drawFigure(currFigure = loadFigure(fName)));
+				outPath = QFileDialog::getSaveFileName(this,
+											 tr("Choose output fileName"),
+											 defPath);
+				QMessageBox::critical(this,
+									  tr("Error"),
+									  tr("Output fileName can't be empty"),
+									  QMessageBox::Ok);
 			}
-			else // if(fName.endsWith(QRegExp(R"(bmp|jpg|jpeg|tiff|png)")))
-			{
-				QMessageBox::warning(this,
-									 tr("Warning"),
-									 tr("Prepare txt file offline"),
-									 QMessageBox::Ok);
-				/// make a txt first
-			}
+			if(!outPath.endsWith(".txt")) { outPath += ".txt"; }
+			saveFigure(outPath, figure);
 		}
 	});
 
-	QObject::connect(ui->saveFilePushButton, &QPushButton::clicked,
-					 [this]()
-	{
-		QString fName = QFileDialog::getSaveFileName(this,
-													 tr("File to save"),
-													 defPath);
-		if(!fName.isEmpty())
-		{
-			saveFigure(fName, currTracking);
-		}
-	});
-
-	QObject::connect(ui->clearPushButton, &QPushButton::clicked,
-					 this, &MainWindow::clearAll);
-
-	QObject::connect(ui->tryAgainPushButton, &QPushButton::clicked,
-					 [this]()
-	{
-		if(!currFigure.empty())
-		{
-		   ui->picLabel->setPixmap(drawFigure(currFigure));
-		}
-		pic.fill("black");
-		if(pnt.device()) { pnt.end(); }
-		currTracking.clear();
-		tracking = false;
-	});
-
 #if 0
-	std::cout << trackingQualityInner(loadFigure(defPath + "/5.txt"),
-									  loadFigure(defPath + "/tr1.txt"))
-			  << std::endl;
-	std::cout << trackingQualityInner(loadFigure(defPath + "/5.txt"),
-									  loadFigure(defPath + "/tr2.txt"))
-			  << std::endl;
-	exit(0);
-#endif
-
-#if 0
-	direction d{direction::NW};
-	std::cout << getDs(d-1).first << "\t" << getDs(d-1).second << std::endl;
-	exit(0);
-#endif
-
-#if 0
-	drawFigure(loadFigure(defPath + "/1.txt"))
-			.save(defPath + "/1.png");
-	auto a = readFromPicture(defPath + "/1.png");
-	saveFigure(defPath + "/1_.txt", a);
-	exit(0);
-#endif
-
-#if 0
-	const QString picName = "hippocampus";
+	const QString picName = "hedge";
 //	thresholding(defPath + "/" + picName + ".jpg").save(defPath + "/" + picName + "_1.jpg", 0, 100);
 //	makeThinnerLine(defPath + "/" + picName + "_1.jpg", false, 4).save(defPath + "/" + picName + "_2.jpg", 0, 100);
 
-	currFigure = readFromPicture(defPath + "/" + picName + "_1.jpg", 1);
-	currFigure = smoothCurve(currFigure);
-	saveFigure(defPath + "/" + picName + ".txt", currFigure);
+//	auto init = loadFigure(defPath + "/hippocampus_adj.txt");
+//	drawFigure(init,
+//			   ui->picLabel->size(),
+//			   2).save(defPath + "/" + picName + "_init.jpg", 0, 100);
+//	auto trac = loadFigure(defPath + "/tr2.txt");
+//	drawFigure(trac,
+//			   ui->picLabel->size(),
+//			   2).save(defPath + "/" + picName + "_trac.jpg", 0, 100);
+//	std::cout << trackingQuality(trac, init) << std::endl; exit(0);
 
-	drawFigure(loadFigure(defPath + "/" + picName + ".txt"),
-			   QPixmap(defPath + "/" + picName + ".jpg").size(),
-			   2).save(defPath + "/" + picName + "_new.jpg", 0, 100);
+
+	auto t1 = chr::high_resolution_clock::now();
+	currFigure = readFromPicture(defPath + "/" + picName + ".jpg", 14, 4, 2);
+	auto t2 = chr::high_resolution_clock::now();
+	std::cout << chr::duration_cast<chr::milliseconds>(t2-t1).count() << std::endl;
+//	currFigure = smoothCurve(currFigure);
+//	saveFigure(defPath + "/" + picName + ".txt", currFigure);
+
+//	drawFigure(loadFigure(defPath + "/" + picName + ".txt"),
+//			   QPixmap(defPath + "/" + picName + ".jpg").size(),
+//			   2).save(defPath + "/" + picName + "_new.jpg", 0, 100);
 	exit(0);
 #endif
+
+#if 0
+	currFigure = loadFigure(defPath + "/1.txt");
+	adjustCurve(currFigure, QSize(1200, 800), ui->dontEnlargeCheckBox->isChecked());
+	drawFigure(currFigure, QSize(1200, 800), 2).save(defPath + "/1.jpg");
+
+	exit(0);
+#endif
+
 }
 
 MainWindow::~MainWindow()
@@ -125,21 +117,150 @@ MainWindow::~MainWindow()
 	delete ui;
 }
 
-void MainWindow::clearAll()
+
+void MainWindow::retrySlot()
 {
-	QPixmap peec(picSiz);
-	peec.fill("black");
+	if(!currFigure.empty())
+	{
+		ui->picLabel->setPixmap(drawFigure(currFigure, ui->picLabel->size()));
+	}
+//	pic.fill("black");
+//	if(pnt.device()) { pnt.end(); }
+	currTracking.clear();
+	tracking = false;
+	timerCount = 0.;
+}
+
+void MainWindow::saveSlot()
+{
+	QString fName = QFileDialog::getSaveFileName(this,
+												 tr("File to save"),
+												 defPath);
+	if(!fName.isEmpty())
+	{
+		saveFigure(fName, currTracking);
+	}
+}
+
+void MainWindow::openNextFile()
+{
+	if(fileIndex == fileNames.end())
+	{
+
+		clearSlot();
+		QMessageBox::information(this,
+								 tr("Congratulations!"),
+								 tr("You have finished all the tasks"),
+								 QMessageBox::Ok);
+		return;
+	}
+	QString fName = *fileIndex;
+	{
+		if(fName.endsWith(".txt", Qt::CaseInsensitive))
+		{
+			currFigure = loadFigure(fName);
+			currFigure = adjustCurve(currFigure, ui->picLabel->size(), ui->dontEnlargeCheckBox->isChecked());
+			ui->picLabel->setPixmap(drawFigure(currFigure, ui->picLabel->size()));
+			reassignPic();
+		}
+		else // if(fName.endsWith(QRegExp(R"(bmp|jpg|jpeg|tiff|png)")))
+		{
+			QMessageBox::warning(this,
+								 tr("Warning"),
+								 tr("Prepare txt file offline"),
+								 QMessageBox::Ok);
+		}
+	}
+	++fileIndex;
+}
+
+void MainWindow::openSlot()
+{
+	clearSlot();
+	/// remake to list
+	fileNames = QFileDialog::getOpenFileNames(this,
+											  tr("Open figure file"),
+											  defPath,
+											  "*.txt");
+	fileIndex = std::begin(fileNames);
+	openNextFile();
+}
+
+void MainWindow::reassignPic()
+{
+	if(pnt.device()) pnt.end();
+	pic = *(ui->picLabel->pixmap());
+	pnt.begin(&pic);
+	pnt.setPen(QPen(QBrush("gray"), 2));
+}
+
+void MainWindow::clearScreen(const QColor & color)
+{
+	QPixmap peec(ui->picLabel->size());
+	peec.fill(color);
 	ui->picLabel->setPixmap(peec);
+}
+
+void MainWindow::clearSlot()
+{
+	clearScreen();
 
 	pic.fill("black");
-	if(pnt.device()) { pnt.end(); }
+//	if(pnt.device()) { pnt.end(); }
 	currTracking.clear();
 	currFigure.clear();
 	tracking = false;
+	timerCount = 0.;
+}
+
+void MainWindow::addDeveloperStuff(bool add)
+{
+	static bool is{false};
+	const int addWidth = 200;
+
+	if(add && !is)
+	{
+		this->resize(size().width() + addWidth, size().height());
+		is = true;
+	}
+	else if(!add && is)
+	{
+		this->resize(size().width() - addWidth, size().height());
+		is = false;
+	}
+
 }
 
 bool MainWindow::eventFilter(QObject *obj, QEvent *event)
 {
+	if(event->type() == QEvent::KeyPress)
+	{
+		QKeyEvent * ev = static_cast<QKeyEvent*>(event);
+		switch(ev->key())
+		{
+		case Qt::Key_O : { openSlot(); return true; }
+		case Qt::Key_S : { saveSlot(); return true; }
+		case Qt::Key_C : { clearSlot(); return true; }
+		case Qt::Key_R : { retrySlot(); return true; }
+		case Qt::Key_D : { mode = Mode::draw; return true; }
+		case Qt::Key_T : { mode = Mode::track; return true; }
+		case Qt::Key_Escape : { this->close(); return true; }
+		case Qt::Key_X :
+		{
+			if(ev->modifiers().testFlag(Qt::ControlModifier))
+			{
+				addDeveloperStuff(true);
+			}
+			else if(ev->modifiers().testFlag(Qt::ShiftModifier))
+			{
+				addDeveloperStuff(false);
+			}
+			return true;
+		}
+
+		default: { /* do nothing */ }
+		}
+	}
 	if(obj == ui->picLabel)
 	{
 		static QPoint prevPos{};
@@ -150,41 +271,47 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event)
 		{
 		case QEvent::MouseButtonRelease:
 		{
-			if(!tracking)
+			if(ev->button() == Qt::LeftButton)
 			{
-				initPos = ev->pos();
-				prevPos = ev->pos();
-				currTracking.clear();
-				pic = *(ui->picLabel->pixmap());
-				pnt.begin(&pic);
-				pnt.setPen(QPen(QBrush("gray"), 2));
-				sta = std::chrono::system_clock::now();
-				comPortDataStream << startCode;
+				if(!tracking)
+				{
+					initPos = ev->pos();
+					prevPos = ev->pos();
+					sta = chr::system_clock::now();
+					comPortDataStream << startCode;
+				}
+				else
+				{
+					ui->picLabel->setPixmap(pic);
+					fin = chr::system_clock::now();
+					timerCount += chr::duration_cast<chr::milliseconds>(fin - sta).count();
+				}
+				tracking = !tracking;
 			}
 			else
 			{
-				pnt.drawLine(ev->pos(), initPos);
-				ui->picLabel->setPixmap(pic);
-				if(ui->trackRadioButton->isChecked())
+				if(mode == Mode::track)
 				{
+					tracking = false;
 					comPortDataStream << finishCode;
-					namespace chr = std::chrono;
-					fin = chr::system_clock::now();
+					double qual = currFigure.empty()
+								  ? 0
+								  : std::max(trackingQuality(currFigure, currTracking),
+											 trackingQuality(currTracking, currFigure));
 					std::cout << "quality = "
-							  << trackingQuality(currFigure, currTracking)
+							  << qual
 							  << std::endl;
 					std::cout << "time = "
-							  << chr::duration_cast<chr::milliseconds>(fin - sta).count() / 1000.
-//							  << " sec"
+							  << timerCount / 1000.
 							  << std::endl;
+					emit completed();
 				}
-				else if(ui->drawRadioButton->isChecked())
+				else if(mode == Mode::draw)
 				{
-//					currTracking = smoothCurve(currTracking, 3);
-					ui->picLabel->setPixmap(drawFigure(currTracking));
+					//						currTracking = smoothCurve(currTracking, 3);
+					ui->picLabel->setPixmap(drawFigure(currTracking, ui->picLabel->size()));
 				}
 			}
-			tracking = !tracking;
 			return true;
 			break;
 		}
@@ -192,7 +319,6 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event)
 		{
 			if(tracking)
 			{
-//				std::cout << ev->pos().x() << "\t" << ev->pos().y() << std::endl;
 				currTracking.push_back(ev->pos());
 				pnt.drawLine(prevPos, ev->pos());
 				ui->picLabel->setPixmap(pic);

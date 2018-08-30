@@ -9,13 +9,19 @@
 
 #include <QPainter>
 
-std::ostream & operator << (std::ostream & os, const QPoint & in)
+std::ostream & operator<< (std::ostream & os, const QPoint & in)
 {
 	os << in.x() << "\t" << in.y();
 	return os;
 }
 
-std::ostream & operator << (std::ostream & os, const direction & in)
+std::ostream & operator<< (std::ostream & os, const QPointF & in)
+{
+	os << in.x() << "\t" << in.y();
+	return os;
+}
+
+std::ostream & operator<< (std::ostream & os, const direction & in)
 {
 	os << getDs(in);
 	return os;
@@ -97,6 +103,7 @@ direction dirFromPoint(const QPoint & pt)
 	else if(pt == QPoint{0, 1})		{ return direction::SS; }
 	else if(pt == QPoint{-1, 1})	{ return direction::SW; }
 	else if(pt == QPoint{-1, 0})	{ return direction::WW; }
+	/// should never get here, no return would cause a crash
 }
 direction dirFromInt(int in)
 {
@@ -118,7 +125,6 @@ double trackingQuality(const std::vector<pointType> & fig,
 	saveFigure("/media/Files/Data/Tracking/tr2.txt", localTrack);
 	double res2 = trackingQualityInner(fig, localTrack);
 
-//	std::cout << res1 << "\t" << res2 << std::endl;
 	return std::max(res1, res2);
 }
 template double trackingQuality(const std::vector<QPoint> & fig,
@@ -130,7 +136,7 @@ template <typename pointType>
 double trackingQualityInner(const std::vector<pointType> & fig,
 							const std::vector<pointType> & alignedTrack)
 {
-	const int windowSize = 30;
+	const int windowSize = 40;
 	std::vector<double> res{};
 	int prevIndex = 0;
 	for(const auto & figPoint : fig)
@@ -156,9 +162,12 @@ double trackingQualityInner(const std::vector<pointType> & fig,
 		}
 		res.push_back(dist);
 	}
+//	for(auto & in : res)
+//	{
+//		std::cout << in << std::endl;
+//	}
 	/// average distance of best fit
 	const double ret = std::accumulate(std::begin(res), std::end(res), 0.) / res.size();
-//	std::cout << "ret = " << ret << std::endl;
 
 	/// mapped [lowest-highest] -> [100-0]
 	const double lowest = 2;
@@ -245,6 +254,55 @@ smoothCurve(const std::vector<pointType> & curve)
 }
 template std::vector<QPoint> smoothCurve(const std::vector<QPoint> & curve);
 template std::vector<QPointF> smoothCurve(const std::vector<QPointF> & curve);
+
+
+template <typename pointType>
+std::vector<pointType>
+adjustCurve(const std::vector<pointType> & curve,
+			const QSize & size,
+			bool dontEnlarge)
+{
+	/// [x/y], [min/max]
+	decltype(curve[0].x()) mins[2][2] = {{curve[0].x(), curve[0].x()},
+										 {curve[0].x(), curve[0].y()}};
+	for(auto & in : curve)
+	{
+		mins[0][0] = std::min(mins[0][0], in.x());
+		mins[0][1] = std::max(mins[0][1], in.x());
+		mins[1][0] = std::min(mins[1][0], in.y());
+		mins[1][1] = std::max(mins[1][1], in.y());
+	}
+	const pointType center((mins[0][0] + mins[0][1]) / 2.,
+			(mins[1][0] + mins[1][1]) / 2.);
+
+	double scaling = std::min(
+						 (size.width() - 40) / double(mins[0][1] - mins[0][0]),
+			(size.height() - 40) / double(mins[1][1] - mins[1][0]));
+
+	if(scaling > 1. && dontEnlarge) { scaling = 1.; }
+
+	/// test cout
+//	std::cout << mins[0][0] << std::endl;
+//	std::cout << mins[0][1] << std::endl;
+//	std::cout << mins[1][0] << std::endl;
+//	std::cout << mins[1][1] << std::endl;
+//	std::cout << center << "\t" << scaling << std::endl;
+
+	std::vector<pointType> res{curve};
+	for(auto & in : res)
+	{
+		in = pointType(size.width(), size.height()) / 2 /// new center
+			 + (in - center) * scaling;
+	}
+	return res;
+}
+template std::vector<QPoint> adjustCurve(const std::vector<QPoint> & curve,
+										 const QSize & size,
+										 bool dontEnlarge);
+template std::vector<QPointF> adjustCurve(const std::vector<QPointF> & curve,
+										  const QSize & size,
+										  bool dontEnlarge);
+
 
 std::vector<QPoint> loadFigure(const QString & filePath)
 {
@@ -440,8 +498,8 @@ std::vector<QPoint> readFromPicture(const QString & picPath,
 	QPoint curveStart = curveS - QPoint(lineThickness / 2, 0);
 	auto curveColor = pic.pixelColor(curveStart);
 
-	std::vector<QPoint> res{};
-	res.reserve(colorVec[lineLightness] / lineThickness * 2); /// heuristic
+	std::list<QPoint> res{};
+//	res.reserve(colorVec[lineLightness] / lineThickness * 2); /// heuristic
 	res.push_back(curveStart);
 
 	/// prepare a list of possible search paths
@@ -546,12 +604,12 @@ std::vector<QPoint> readFromPicture(const QString & picPath,
 		}
 
 
-//		std::cout
-//				<< currPoint << "\t"
-//				<< static_cast<int>(tmp[0].first) << std::endl
-//				<< currPoint + stepSize * tmp[0].first << std::endl
-//				<< tmp[0].second << std::endl
-//				<< std::endl;
+		std::cout
+				<< currPoint << "\t"
+				<< static_cast<int>(tmp[0].first) << std::endl
+				<< currPoint + stepSize * tmp[0].first << std::endl
+				<< tmp[0].second << std::endl
+				<< std::endl;
 
 
 		prevDir = tmp[0].first;
@@ -588,17 +646,35 @@ std::vector<QPoint> readFromPicture(const QString & picPath,
 									/ maxHistoryDirsSize).toPoint());
 		}
 
-		if(QPoint::dotProduct(res.back() - curveStart,
-							  res.back() - curveStart) <= std::pow(lineThickness / 2, 2)
-		   && counter > lineThickness * 5
-		   )
+		if(counter > 50)
 		{
-			res.push_back((res.back() + curveStart) / 2);
-			break;
+			static const int nnn = 15;
+
+			static auto ref{std::begin(res)};
+			if(ref == std::begin(res))
+			{
+
+				for(int i = 0; i < nnn; ++i)
+				{
+					++ref;
+				}
+			}
+
+			if(QPoint::dotProduct(res.back() - (*ref),
+								  res.back() - (*ref)) <= std::pow(lineThickness / 2, 2)
+
+			   )
+			{
+				res.push_back((res.back() + *ref) / 2);
+				for(int i = 0; i < nnn; ++i) { res.pop_front(); }
+				break;
+			}
 		}
 		++counter;
 	}
-	return res;
+	std::vector<QPoint> res2(res.size());
+	std::copy(std::begin(res), std::end(res), std::begin(res2));
+	return res2;
 }
 
 std::vector<QPoint> readFromPictureSimple(const QString & picPath)

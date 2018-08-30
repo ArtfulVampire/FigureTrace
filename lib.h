@@ -8,7 +8,6 @@
 #include <QPoint>
 #include <QColor>
 
-const QSize picSiz(650, 650);
 const QString defPath = "/media/Files/Data/Tracking";
 
 enum class direction : int {NW = 0, NN, NE, EE, SE, SS, SW, WW};
@@ -27,7 +26,8 @@ QPoint operator+(const direction & a, const QPoint & b);
 QPoint operator+(const QPoint & a, const direction & b);
 
 std::ostream & operator<< (std::ostream & os, const QPoint & in);
-std::ostream & operator << (std::ostream & os, const direction & in);
+std::ostream & operator<< (std::ostream & os, const QPointF & in);
+std::ostream & operator<< (std::ostream & os, const direction & in);
 
 template <typename pointType>
 double trackingQuality(const std::vector<pointType> & fig,
@@ -46,12 +46,20 @@ template <typename pointType>
 std::vector<pointType>
 smoothCurve(const std::vector<pointType> & curve);
 
+template <typename pointType>
+std::vector<pointType>
+adjustCurve(const std::vector<pointType> & curve,
+			const QSize & size,
+			bool dontEnlarge);
+
 std::vector<QPoint> loadFigure(const QString & filePath);
 
 template <typename pointType>
 std::vector<pointType> approximateCurve(const std::vector<pointType> & in);
 
-QPixmap drawFigure(const std::vector<QPoint> & in, const QSize & size = picSiz, int lineWidth = 2);
+QPixmap drawFigure(const std::vector<QPoint> & in,
+				   const QSize & size,
+				   int lineWidth = 2);
 
 
 QImage makeThinnerLine(const QString & picPath, bool isLineWhite, int num);
