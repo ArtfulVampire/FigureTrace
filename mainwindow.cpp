@@ -7,6 +7,7 @@
 #include <QMouseEvent>
 #include <QFileDialog>
 #include <QTime>
+#include <QMessageBox>
 
 MainWindow::MainWindow(QWidget *parent) :
 	QMainWindow(parent),
@@ -33,7 +34,7 @@ MainWindow::MainWindow(QWidget *parent) :
 		clearAll();
 		QString fName = QFileDialog::getOpenFileName(this,
 													 tr("Open figure file"),
-													 "/media/Files/Data/Tracking");
+													 defPath);
 		if(!fName.isEmpty())
 		{
 			if(fName.endsWith(".txt", Qt::CaseInsensitive))
@@ -42,10 +43,11 @@ MainWindow::MainWindow(QWidget *parent) :
 			}
 			else // if(fName.endsWith(QRegExp(R"(bmp|jpg|jpeg|tiff|png)")))
 			{
-				currFigure = readFromPicture(fName);
-//				std::cout << currFigure.size() << std::endl;
-//				currFigure = smoothCurve(currFigure);
-				ui->picLabel->setPixmap(drawFigure(currFigure));
+				QMessageBox::warning(this,
+									 tr("Warning"),
+									 tr("Prepare txt file offline"),
+									 QMessageBox::Ok);
+				/// make a txt first
 			}
 		}
 	});
@@ -55,7 +57,7 @@ MainWindow::MainWindow(QWidget *parent) :
 	{
 		QString fName = QFileDialog::getSaveFileName(this,
 													 tr("File to save"),
-													 "/media/Files/Data/Tracking");
+													 defPath);
 		if(!fName.isEmpty())
 		{
 			saveFigure(fName, currTracking);
@@ -79,11 +81,11 @@ MainWindow::MainWindow(QWidget *parent) :
 	});
 
 #if 0
-	std::cout << trackingQualityInner(loadFigure("/media/Files/Data/Tracking/5.txt"),
-									  loadFigure("/media/Files/Data/Tracking/tr1.txt"))
+	std::cout << trackingQualityInner(loadFigure(defPath + "/5.txt"),
+									  loadFigure(defPath + "/tr1.txt"))
 			  << std::endl;
-	std::cout << trackingQualityInner(loadFigure("/media/Files/Data/Tracking/5.txt"),
-									  loadFigure("/media/Files/Data/Tracking/tr2.txt"))
+	std::cout << trackingQualityInner(loadFigure(defPath + "/5.txt"),
+									  loadFigure(defPath + "/tr2.txt"))
 			  << std::endl;
 	exit(0);
 #endif
@@ -95,21 +97,25 @@ MainWindow::MainWindow(QWidget *parent) :
 #endif
 
 #if 0
-	drawFigure(loadFigure("/media/Files/Data/Tracking/1.txt"))
-			.save("/media/Files/Data/Tracking/1.png");
-	auto a = readFromPicture("/media/Files/Data/Tracking/1.png");
-	saveFigure("/media/Files/Data/Tracking/1_.txt", a);
+	drawFigure(loadFigure(defPath + "/1.txt"))
+			.save(defPath + "/1.png");
+	auto a = readFromPicture(defPath + "/1.png");
+	saveFigure(defPath + "/1_.txt", a);
 	exit(0);
 #endif
 
-#if 01
-//	thresholding(defPath + "/hedge.jpg").save(defPath + "/hedge1.jpg", 0, 100);
-//	makeThinnerLine(defPath + "/hedge1.jpg", false, 4).save(defPath + "/hedge2.jpg", 0, 100);
-	currFigure = readFromPicture("/media/Files/Data/Tracking/hedge.jpg");
-//	std::cout << currFigure.size() << std::endl;
-//	currFigure = smoothCurve(currFigure);
-//	saveFigure("/media/Files/Data/Tracking/hedge.txt", currFigure);
-//	ui->picLabel->setPixmap(drawFigure(currFigure));
+#if 0
+	const QString picName = "hippocampus";
+//	thresholding(defPath + "/" + picName + ".jpg").save(defPath + "/" + picName + "_1.jpg", 0, 100);
+//	makeThinnerLine(defPath + "/" + picName + "_1.jpg", false, 4).save(defPath + "/" + picName + "_2.jpg", 0, 100);
+
+	currFigure = readFromPicture(defPath + "/" + picName + "_1.jpg", 1);
+	currFigure = smoothCurve(currFigure);
+	saveFigure(defPath + "/" + picName + ".txt", currFigure);
+
+	drawFigure(loadFigure(defPath + "/" + picName + ".txt"),
+			   QPixmap(defPath + "/" + picName + ".jpg").size(),
+			   2).save(defPath + "/" + picName + "_new.jpg", 0, 100);
 	exit(0);
 #endif
 }

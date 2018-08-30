@@ -51,7 +51,7 @@ std::vector<QPoint> loadFigure(const QString & filePath);
 template <typename pointType>
 std::vector<pointType> approximateCurve(const std::vector<pointType> & in);
 
-QPixmap drawFigure(const std::vector<QPoint> & in);
+QPixmap drawFigure(const std::vector<QPoint> & in, const QSize & size = picSiz, int lineWidth = 2);
 
 
 QImage makeThinnerLine(const QString & picPath, bool isLineWhite, int num);
@@ -60,7 +60,15 @@ QImage thresholding(const QString & picPath);
 int numPointsMask(const QImage & pic, const QPoint & pt,
 				  const QColor & curveColor, int lineThickness);
 bool areColorsSimilar(const QColor & in1, const QColor & in2, int thr = 15);
-std::vector<QPoint> readFromPicture(const QString & picPath);
+
+std::vector<QPoint> readFromPicture(const QString & picPath,
+									int lineThickness = 1,
+									int numSteps = 5,
+									int stepSize = 1);
+
+std::vector<QPoint> readFromPictureSimple(const QString & picPath); /// lineWidth < 4
+
+std::list<std::list<int>> generateDirectionVariants(int numSteps = 4);
 
 template <typename pointType>
 void saveFigure(const QString & filePath, const std::vector<pointType> & in);
