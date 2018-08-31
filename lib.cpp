@@ -15,6 +15,12 @@ std::ostream & operator<< (std::ostream & os, const QPoint & in)
 	return os;
 }
 
+std::ostream & operator<< (std::ostream & os, const QString & in)
+{
+	os << in.toStdString();
+	return os;
+}
+
 std::ostream & operator<< (std::ostream & os, const QPointF & in)
 {
 	os << in.x() << "\t" << in.y();
@@ -110,7 +116,15 @@ direction dirFromInt(int in)
 	return static_cast<direction>((in + 8) % 8);
 }
 
+double myRound(double in, int decims)
+{
+	return std::round(in * std::pow(10., decims)) / std::pow(10., decims);
+}
 
+double quality(double in, double low, double hig)
+{
+	return (hig - in) / (hig - low) * 100.;
+}
 
 template <typename pointType>
 double trackingQuality(const std::vector<pointType> & fig,
@@ -125,7 +139,7 @@ double trackingQuality(const std::vector<pointType> & fig,
 	saveFigure("/media/Files/Data/Tracking/tr2.txt", localTrack);
 	double res2 = trackingQualityInner(fig, localTrack);
 
-	return std::max(res1, res2);
+	return std::min(res1, res2);
 }
 template double trackingQuality(const std::vector<QPoint> & fig,
 								const std::vector<QPoint> & track);
@@ -162,17 +176,10 @@ double trackingQualityInner(const std::vector<pointType> & fig,
 		}
 		res.push_back(dist);
 	}
-//	for(auto & in : res)
-//	{
-//		std::cout << in << std::endl;
-//	}
+
 	/// average distance of best fit
 	const double ret = std::accumulate(std::begin(res), std::end(res), 0.) / res.size();
-
-	/// mapped [lowest-highest] -> [100-0]
-	const double lowest = 2;
-	const double highest = 20;
-	return (highest - ret) / (highest - lowest) * 100.;
+	return ret;
 }
 template double trackingQualityInner(const std::vector<QPoint> & fig,
 									const std::vector<QPoint> & alignedTrack);
@@ -715,7 +722,7 @@ std::vector<QPoint> readFromPictureSimple(const QString & picPath)
 	res.push_back(curveStart);
 
 	QPoint currPoint = curveStart;
-	direction prevDir; /// = history.back()
+	direction prevDir{}; /// = history.back()
 	/// detect initial direction
 	/// check directions (NW, SW, WW, NN), diagonal first. other are empty
 	for(int d : {0, 6, 7, 1})

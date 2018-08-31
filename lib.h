@@ -7,8 +7,10 @@
 #include <QPixmap>
 #include <QPoint>
 #include <QColor>
+#include <QDir>
 
-const QString defPath = "/media/Files/Data/Tracking";
+//const QString defPath = "/media/Files/Data/Tracking";
+const QString defPath = ".";
 
 enum class direction : int {NW = 0, NN, NE, EE, SE, SS, SW, WW};
 direction operator++(direction & in, int);
@@ -28,6 +30,11 @@ QPoint operator+(const QPoint & a, const direction & b);
 std::ostream & operator<< (std::ostream & os, const QPoint & in);
 std::ostream & operator<< (std::ostream & os, const QPointF & in);
 std::ostream & operator<< (std::ostream & os, const direction & in);
+std::ostream & operator<< (std::ostream & os, const QString & in);
+
+double myRound(double in, int decims = 2);
+
+double quality(double in, double low = 2, double hig = 20);
 
 template <typename pointType>
 double trackingQuality(const std::vector<pointType> & fig,

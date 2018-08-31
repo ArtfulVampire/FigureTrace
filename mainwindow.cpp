@@ -4,6 +4,7 @@
 #include "lib.h"
 
 #include <memory>
+#include <cmath>
 
 #include <QEvent>
 #include <QMouseEvent>
@@ -36,7 +37,9 @@ MainWindow::MainWindow(QWidget *parent) :
 	clearScreen();
 	reassignPic();
 
-	QObject::connect(this, SIGNAL(completed()), this, SLOT(openNextFile()));
+	QObject::connect(this, &MainWindow::completed,
+					 [this]() { ++fileIndex; openNextFile(); });
+
 	QObject::connect(ui->makeTxtPushButton,
 					 &QPushButton::clicked,
 					 [this]()
@@ -144,16 +147,26 @@ void MainWindow::saveSlot()
 
 void MainWindow::openNextFile()
 {
+	clearSlot();
+
+
 	if(fileIndex == fileNames.end())
 	{
-
-		clearSlot();
+		outStr.close();
 		QMessageBox::information(this,
 								 tr("Congratulations!"),
 								 tr("You have finished all the tasks"),
 								 QMessageBox::Ok);
 		return;
 	}
+	else
+	{
+		QMessageBox::information(this,
+								 tr("Info"),
+								 tr("Press OK for the next task"),
+								 QMessageBox::Ok);
+	}
+
 	QString fName = *fileIndex;
 	{
 		if(fName.endsWith(".txt", Qt::CaseInsensitive))
@@ -171,18 +184,34 @@ void MainWindow::openNextFile()
 								 QMessageBox::Ok);
 		}
 	}
-	++fileIndex;
 }
 
 void MainWindow::openSlot()
 {
-	clearSlot();
 	/// remake to list
 	fileNames = QFileDialog::getOpenFileNames(this,
 											  tr("Open figure file"),
 											  defPath,
 											  "*.txt");
 	fileIndex = std::begin(fileNames);
+
+
+	static int outFileNum{0};
+	auto outFilePath = [](int i) -> QString
+	{
+		return "./output_" + QString::number(i) + ".txt";
+	};
+	for(; QFile(outFilePath(outFileNum)).exists(); ++outFileNum);
+
+	outStr.open(outFilePath(outFileNum).toStdString());
+	outStr
+			<< "fileName  " << "\t"
+			<< "avDistance" << "\t"
+			<< "quality   " << "\t"
+			<< "time      " << "\t"
+			<< "numPauses " << "\t"
+			<< std::endl;
+
 	openNextFile();
 }
 
@@ -204,13 +233,13 @@ void MainWindow::clearScreen(const QColor & color)
 void MainWindow::clearSlot()
 {
 	clearScreen();
-
 	pic.fill("black");
-//	if(pnt.device()) { pnt.end(); }
+
 	currTracking.clear();
 	currFigure.clear();
 	tracking = false;
 	timerCount = 0.;
+	numPauses = 0;
 }
 
 void MainWindow::addDeveloperStuff(bool add)
@@ -285,25 +314,26 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event)
 					ui->picLabel->setPixmap(pic);
 					fin = chr::system_clock::now();
 					timerCount += chr::duration_cast<chr::milliseconds>(fin - sta).count();
+					++numPauses;
 				}
 				tracking = !tracking;
 			}
-			else
+			else /// if(ev->button() == Qt::RightButton)
 			{
 				if(mode == Mode::track)
 				{
 					tracking = false;
 					comPortDataStream << finishCode;
-					double qual = currFigure.empty()
-								  ? 0
-								  : std::max(trackingQuality(currFigure, currTracking),
-											 trackingQuality(currTracking, currFigure));
-					std::cout << "quality = "
-							  << qual
-							  << std::endl;
-					std::cout << "time = "
-							  << timerCount / 1000.
-							  << std::endl;
+					double qual1 = trackingQuality(currFigure, currTracking);
+					double qual2 = trackingQuality(currTracking, currFigure);
+					outStr
+							<< (*fileIndex).mid((*fileIndex).lastIndexOf('/') + 1) << "\t\t"
+							<< myRound(std::min(qual1, qual2), 1) << "\t\t"
+							<< myRound(quality(std::min(qual1, qual2)), 0) << "\t\t"
+							<< myRound(timerCount / 1000., 1) << "\t\t"
+							<< numPauses << "\t\t"
+							<< std::endl;
+
 					emit completed();
 				}
 				else if(mode == Mode::draw)

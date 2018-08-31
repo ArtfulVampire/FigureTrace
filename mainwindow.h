@@ -7,6 +7,7 @@
 #include <QSerialPort>
 
 #include <chrono>
+#include <fstream>
 
 namespace Ui {
 class MainWindow;
@@ -52,10 +53,12 @@ private:
 	QStringList::iterator fileIndex{};
 	std::vector<QPoint> currFigure{};
 	std::vector<QPoint> currTracking{};
+	int numPauses{0};
 
 	std::chrono::system_clock::time_point sta{};
 	std::chrono::system_clock::time_point fin{};
 	int timerCount{0};
+	std::ofstream outStr{};
 
 	QSerialPort * comPort = nullptr;
 	QDataStream comPortDataStream{};
