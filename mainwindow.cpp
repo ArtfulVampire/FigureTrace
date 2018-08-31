@@ -20,6 +20,7 @@ MainWindow::MainWindow(QWidget *parent) :
 	ui(new Ui::MainWindow)
 {
 	ui->setupUi(this);
+//	std::cout << this->size().width() << std::endl;
 
 	ui->picLabel->setMouseTracking(true);
 
@@ -75,6 +76,11 @@ MainWindow::MainWindow(QWidget *parent) :
 			saveFigure(outPath, figure);
 		}
 	});
+	QObject::connect(ui->justOpenPushButton, &QPushButton::clicked,
+					 [this]() { justOpenSlot(); });
+
+
+
 
 #if 0
 	const QString picName = "hedge";
@@ -186,6 +192,21 @@ void MainWindow::openNextFile()
 	}
 }
 
+
+
+void MainWindow::justOpenSlot()
+{
+	clearSlot();
+	QString fName = QFileDialog::getOpenFileName(this,
+												 tr("Open figure file"),
+												 defPath,
+												 "*.txt");
+	currFigure = loadFigure(fName);
+	currFigure = adjustCurve(currFigure, ui->picLabel->size(), ui->dontEnlargeCheckBox->isChecked());
+	ui->picLabel->setPixmap(drawFigure(currFigure, ui->picLabel->size()));
+	reassignPic();
+}
+
 void MainWindow::openSlot()
 {
 	/// remake to list
@@ -193,6 +214,7 @@ void MainWindow::openSlot()
 											  tr("Open figure file"),
 											  defPath,
 											  "*.txt");
+	if(fileNames.isEmpty()) { return; }
 	fileIndex = std::begin(fileNames);
 
 
@@ -365,3 +387,4 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event)
 	}
 	return QWidget::eventFilter(obj, event);
 }
+

@@ -26,6 +26,7 @@ protected:
 
 public slots:
 	void clearSlot();
+	void justOpenSlot();
 	void openSlot();
 	void openNextFile();
 	void saveSlot();
